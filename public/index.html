@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A real-time multiplayer diagnosis game for front-end students. The website is sick — can you save it?">
+  <meta name="theme-color" content="#04070e">
+  <title>🏥 FRONT-END HOSPITAL — The Website Is Sick</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏥</text></svg>">
+  <link rel="stylesheet" href="/css/theme.css">
+  <link rel="stylesheet" href="/css/components.css">
+  <link rel="stylesheet" href="/css/animations.css">
+</head>
+<body>
+  <main class="shell screen" style="display:grid;place-items:center;min-height:100dvh;padding-block:40px">
+    <div style="width:100%;max-width:820px;text-align:center">
+
+      <div class="eyebrow" style="margin-bottom:14px">Emergency Department · Level 1</div>
+
+      <h1 style="margin-bottom:6px">
+        <span style="font-size:1.1em">🏥</span>
+        FRONT-END HOSPITAL
+      </h1>
+
+      <p style="font-size:clamp(1.05rem,2.6vw,1.4rem);color:var(--text-dim);font-weight:600;margin-bottom:8px">
+        The Website Is Sick. Can You Save It?
+      </p>
+
+      <div id="ecg-slot" style="margin:10px auto 26px;max-width:620px"></div>
+
+      <div class="row" style="justify-content:center;gap:16px;margin-bottom:34px">
+        <a class="btn btn--primary btn--lg" href="/host">🩺&nbsp; CREATE GAME</a>
+        <a class="btn btn--lg" href="/join">🚑&nbsp; JOIN A ROOM</a>
+      </div>
+
+      <div class="stats" style="max-width:640px;margin-inline:auto">
+        <div class="stat"><div class="stat__label">Doctors</div><div class="stat__value">2–12</div></div>
+        <div class="stat"><div class="stat__label">Patients</div><div class="stat__value">12</div></div>
+        <div class="stat"><div class="stat__label">Phases</div><div class="stat__value">8</div></div>
+        <div class="stat"><div class="stat__label">Sign-up</div><div class="stat__value" style="font-size:1.1rem">NONE</div></div>
+      </div>
+
+      <div class="panel" style="margin-top:34px;text-align:left">
+        <div class="panel__title" style="margin-bottom:12px">How a shift works</div>
+        <ol style="margin:0;padding-left:20px;color:var(--text-dim);line-height:2">
+          <li>One person presses <strong style="color:var(--text)">Create Game</strong> and reads out the room code.</li>
+          <li>Every student opens the join link, types a doctor name and the code.</li>
+          <li>The host presses <strong style="color:var(--red)">START EMERGENCY</strong>.</li>
+          <li>Twelve classified patient files appear. Each doctor claims exactly one — first click wins.</li>
+          <li>Read the symptoms and the evidence. Write a diagnosis, a cause and a treatment.</li>
+          <li>Present at the Medical Conference, then the correct answers are revealed and scored.</li>
+        </ol>
+      </div>
+
+      <p class="mute" style="margin-top:26px;font-size:.85rem">
+        Built for a classroom. No accounts, no installs for students — just a link.
+      </p>
+    </div>
+  </main>
+
+  <script type="module">
+    import { ecgStrip } from '/js/ui.js';
+    document.getElementById('ecg-slot').append(ecgStrip());
+  </script>
+</body>
+</html>

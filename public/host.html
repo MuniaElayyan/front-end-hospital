@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#04070e">
+  <title>Host Control — 🏥 FRONT-END HOSPITAL</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧑‍⚕️</text></svg>">
+  <link rel="stylesheet" href="/css/theme.css">
+  <link rel="stylesheet" href="/css/components.css">
+  <link rel="stylesheet" href="/css/animations.css">
+  <style>
+    .host-grid {
+      display: grid;
+      gap: var(--gap);
+      grid-template-columns: 290px minmax(0, 1fr);
+      align-items: start;
+    }
+    .host-side { position: sticky; top: 76px; display: grid; gap: var(--gap); }
+    @media (max-width: 980px) {
+      .host-grid { grid-template-columns: 1fr; }
+      .host-side { position: static; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">
+      <span class="cross">🏥</span>
+      <span>Front-End Hospital<small>Chief of Medicine</small></span>
+    </a>
+    <span class="badge badge--cyan mono" id="tb-room">FH-----</span>
+    <span class="badge" id="tb-phase">…</span>
+    <span class="spacer"></span>
+    <span class="badge" id="tb-count">0 / 12</span>
+    <span id="tb-sound"></span>
+  </header>
+
+  <main class="shell shell--wide" id="stage">
+    <div class="panel" style="display:grid;place-items:center;gap:16px;padding:60px 20px">
+      <div class="spinner"></div>
+      <div class="dim">Opening the emergency room<span class="loading-dots"></span></div>
+    </div>
+  </main>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="module" src="/js/host.js"></script>
+</body>
+</html>

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#04070e">
+  <title>Doctor Station — 🏥 FRONT-END HOSPITAL</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🩺</text></svg>">
+  <link rel="stylesheet" href="/css/theme.css">
+  <link rel="stylesheet" href="/css/components.css">
+  <link rel="stylesheet" href="/css/animations.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">
+      <span class="cross">🏥</span>
+      <span>Front-End Hospital<small>Doctor Station</small></span>
+    </a>
+    <span class="badge badge--cyan mono" id="tb-room">FH-----</span>
+    <span class="badge" id="tb-phase">…</span>
+    <span class="spacer"></span>
+    <span class="badge" id="tb-me">—</span>
+    <span id="tb-sound"></span>
+  </header>
+
+  <main class="shell" id="stage">
+    <div class="panel" style="display:grid;place-items:center;gap:16px;padding:60px 20px">
+      <div class="spinner"></div>
+      <div class="dim">Connecting to the hospital<span class="loading-dots"></span></div>
+    </div>
+  </main>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="module" src="/js/play.js"></script>
+</body>
+</html>

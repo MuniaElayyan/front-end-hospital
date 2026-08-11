@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#04070e">
+  <title>Join Emergency Room — 🏥 FRONT-END HOSPITAL</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚑</text></svg>">
+  <link rel="stylesheet" href="/css/theme.css">
+  <link rel="stylesheet" href="/css/components.css">
+  <link rel="stylesheet" href="/css/animations.css">
+</head>
+<body>
+  <main class="shell screen" style="display:grid;place-items:center;min-height:100dvh">
+    <div style="width:100%;max-width:460px">
+
+      <div style="text-align:center;margin-bottom:24px">
+        <h1 style="font-size:clamp(1.4rem,5vw,2rem);margin-bottom:4px">🏥 FRONT-END HOSPITAL</h1>
+        <div class="eyebrow">Join Emergency Room</div>
+      </div>
+
+      <form class="panel stack" id="join-form" novalidate>
+        <div class="field">
+          <label for="name">Enter your Doctor Name</label>
+          <input class="input" id="name" name="name" type="text" maxlength="24"
+                 autocomplete="nickname" placeholder="e.g. Munia" required>
+        </div>
+
+        <div class="field">
+          <label for="code">Enter Room Code</label>
+          <input class="input input--code" id="code" name="code" type="text"
+                 inputmode="numeric" maxlength="8" placeholder="FH-0000"
+                 autocomplete="off" spellcheck="false" required>
+          <div class="field__hint" id="room-status">Ask the host for the code on screen.</div>
+        </div>
+
+        <div class="field__error" id="error" role="alert"></div>
+
+        <button class="btn btn--primary btn--lg btn--block" id="submit" type="submit">
+          JOIN HOSPITAL
+        </button>
+
+        <a class="btn btn--ghost btn--sm btn--block" href="/">← Back to reception</a>
+      </form>
+
+      <p class="mute center" style="margin-top:18px;font-size:.82rem">
+        No account needed. Your name is how everyone will see you.
+      </p>
+    </div>
+  </main>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="module" src="/js/join.js"></script>
+</body>
+</html>

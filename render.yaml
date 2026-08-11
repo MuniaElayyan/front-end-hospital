@@ -1,0 +1,23 @@
+# Render.com blueprint — deploy with: New → Blueprint → point at this repo.
+# Render's free tier supports WebSockets, which is all this game needs.
+services:
+  - type: web
+    name: front-end-hospital
+    runtime: node
+    plan: free
+    buildCommand: npm ci --omit=dev
+    startCommand: node server/index.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MIN_PLAYERS
+        value: "2"
+      - key: MAX_PLAYERS
+        value: "12"
+      # Free instances have an ephemeral filesystem, so disk snapshots buy
+      # nothing there. Turn them on with a paid instance + a mounted disk.
+      - key: PERSIST
+        value: "false"
+      # PORT is injected by Render. PUBLIC_ORIGIN is optional — the browser
+      # derives the join link from its own address.
