@@ -8,7 +8,7 @@
  */
 
 import assert from 'node:assert/strict';
-import test, { before } from 'node:test';
+import test, { after, before } from 'node:test';
 
 import { parseHTML } from 'linkedom';
 
@@ -26,10 +26,21 @@ before(async () => {
   globalThis.Node = dom.Node;
   globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
   globalThis.matchMedia = () => ({ matches: false, addEventListener() {} });
+  // net.js opens a socket at import time; the URL helpers under test do not
+  // need a real one.
+  globalThis.io = () => ({
+    on() {}, once() {}, off() {}, emit() {}, close() {},
+  });
 
   ({ el } = await import('../public/js/ui.js'));
   ({ renderEvidence, highlight } = await import('../public/js/evidence.js'));
   ({ PATIENTS, FINAL_PATIENT } = await import('../server/game/patients.js'));
+});
+
+after(async () => {
+  // net.js leaves a clock-sync interval behind.
+  await new Promise((r) => setTimeout(r, 50));
+  process.exit(0);
 });
 
 /* ── the element factory ─────────────────────────────────────────────────── */
@@ -136,6 +147,51 @@ test('each case is complete, distinct and keeps its disease name out of the file
     assert.ok(!shown.includes(p.title.toLowerCase()),
       `patient ${p.number} does not give its own answer away`);
   });
+});
+
+/* ── URL handling ────────────────────────────────────────────────────────── */
+// These decide whether a link pasted into WhatsApp actually opens the right
+// room, so they are worth pinning down rather than assuming.
+
+test('every shape of room link is understood, and the host key is wiped from the bar', async () => {
+  const net = await import('../public/js/net.js');
+
+  const cases = [
+    ['http://x.test/join/FH-4827', 'FH-4827', null],
+    ['http://x.test/join?room=FH-4827', 'FH-4827', null],
+    ['http://x.test/join?code=FH-4827', 'FH-4827', null],
+    ['http://x.test/host?room=FH-4827&key=secret123', 'FH-4827', 'secret123'],
+    ['http://x.test/host', null, null],
+  ];
+
+  for (const [href, expectRoom, expectKey] of cases) {
+    let replacedWith = null;
+    globalThis.window.location = { href, origin: 'http://x.test' };
+    globalThis.window.history = { replaceState: (_s, _t, url) => { replacedWith = url; } };
+
+    const { room, key } = net.consumeUrlParams();
+    assert.equal(room, expectRoom, href);
+    assert.equal(key, expectKey, href);
+
+    if (href.includes('key=')) {
+      assert.ok(replacedWith !== null, 'the URL was rewritten');
+      assert.ok(!replacedWith.includes('secret'), 'the token no longer sits in the address bar');
+    }
+  }
+});
+
+test('shareable links are built from the serving origin, never a hard-coded host', async () => {
+  const net = await import('../public/js/net.js');
+
+  globalThis.window.location = { href: 'https://feh.onrender.com/host', origin: 'https://feh.onrender.com' };
+  assert.equal(net.joinUrl('FH-4827'), 'https://feh.onrender.com/join/FH-4827');
+  assert.equal(net.hostUrl('FH-4827', 'tok'), 'https://feh.onrender.com/host?room=FH-4827&key=tok');
+
+  // Same code, different deployment — the links follow, with nothing configured.
+  globalThis.window.location = { href: 'http://localhost:3000/host', origin: 'http://localhost:3000' };
+  assert.equal(net.joinUrl('FH-4827'), 'http://localhost:3000/join/FH-4827');
+
+  assert.ok(!net.joinUrl('FH-1').includes('192.168'), 'no LAN address ever leaks into a link');
 });
 
 test('the final patient carries five independent faults', () => {

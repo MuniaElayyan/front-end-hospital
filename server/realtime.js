@@ -22,9 +22,41 @@ const PLAY_ROOM = (code) => `play:${code}`;
 
 export function attachRealtime(httpServer) {
   const io = new Server(httpServer, {
-    cors: { origin: config.publicOrigin || true, methods: ['GET', 'POST'] },
-    pingTimeout: 25_000,
-    pingInterval: 10_000,
+    /**
+     * The client is always served BY this same server, so every real connection
+     * is same-origin and CORS never enters the picture. `origin: true` reflects
+     * whatever origin asks, which keeps the socket working on any domain the
+     * app is deployed to — including Render's *.onrender.com hostname, a custom
+     * domain, and both at once — without anyone having to configure it.
+     *
+     * This is not a hole: there is no cookie or session auth to ride on. A
+     * socket is anonymous until it presents a room code and a secret token in
+     * the payload, so a page on another origin gains nothing by connecting.
+     *
+     * Deliberately NOT tied to PUBLIC_ORIGIN: a mismatch there (trailing slash,
+     * www vs apex, preview URL) would break every connection with an error
+     * that looks nothing like its cause.
+     */
+    cors: { origin: true, methods: ['GET', 'POST'] },
+
+    /**
+     * Mobile data and hotel Wi-Fi drop idle sockets aggressively, and a phone
+     * that locks its screen suspends the tab. These windows are generous enough
+     * to survive a screen lock and a lift ride without declaring the player
+     * gone — and even when it does, the player keeps their patient and walks
+     * back in on reconnect.
+     */
+    pingTimeout: 30_000,
+    pingInterval: 12_000,
+
+    /**
+     * Keep the polling fallback available. Some university and corporate
+     * networks, and a few mobile carriers, block or mangle the WebSocket
+     * upgrade; Socket.IO then falls back to HTTP long-polling and the game
+     * still works, just with slightly more latency.
+     */
+    transports: ['websocket', 'polling'],
+    allowUpgrades: true,
   });
 
   // ── broadcasting ──────────────────────────────────────────────────────────

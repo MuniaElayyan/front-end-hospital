@@ -1,23 +1,59 @@
-# Render.com blueprint — deploy with: New → Blueprint → point at this repo.
-# Render's free tier supports WebSockets, which is all this game needs.
+# ─────────────────────────────────────────────────────────────────────────────
+#  Render blueprint — Front-End Hospital
+#
+#  Deploy:  render.com → New → Blueprint → pick this repository → Apply.
+#  You get a public URL like https://front-end-hospital.onrender.com and the
+#  game works from anywhere on the internet with no further configuration.
+#
+#  IMPORTANT — this service must run as EXACTLY ONE instance. The whole game
+#  state (rooms, patients, who holds what, scores) lives in the memory of one
+#  Node process. Two instances behind a load balancer would be two separate
+#  hospitals: the host would land in one, half the students in the other, and
+#  nothing would appear to sync. Do not enable autoscaling or raise the
+#  instance count without first moving state to a shared store.
+# ─────────────────────────────────────────────────────────────────────────────
+
 services:
   - type: web
     name: front-end-hospital
     runtime: node
-    plan: free
+    plan: free                 # free supports WebSockets, which is all we need
+    region: frankfurt          # closest of Render's regions to the Middle East
+    branch: main
+
     buildCommand: npm ci --omit=dev
-    startCommand: node server/index.js
+    startCommand: npm start
+
     healthCheckPath: /api/health
+
     envVars:
+      - key: NODE_VERSION
+        value: "22"
       - key: NODE_ENV
         value: production
+
+      # Render injects PORT itself — never set it here.
+      # HOST defaults to 0.0.0.0 in server/config.js, which is required inside
+      # a container. Do not override it.
+
       - key: MIN_PLAYERS
         value: "2"
       - key: MAX_PLAYERS
         value: "12"
-      # Free instances have an ephemeral filesystem, so disk snapshots buy
-      # nothing there. Turn them on with a paid instance + a mounted disk.
+
+      # Rooms survive an idle gap of this long with nobody connected.
+      - key: ROOM_TTL_MINUTES
+        value: "240"
+
+      # Snapshots write to local disk. A free instance has an EPHEMERAL
+      # filesystem that is wiped on every restart and every deploy, so
+      # snapshots there buy nothing and only add disk writes. Switch this to
+      # "true" only on a paid instance with a mounted disk.
       - key: PERSIST
         value: "false"
-      # PORT is injected by Render. PUBLIC_ORIGIN is optional — the browser
-      # derives the join link from its own address.
+
+      # PUBLIC_ORIGIN is optional and affects nothing the browser does — every
+      # link the app builds comes from window.location.origin. Set it only if
+      # you want the boot log to print your real URL:
+      # - key: PUBLIC_ORIGIN
+      #   value: https://front-end-hospital.onrender.com

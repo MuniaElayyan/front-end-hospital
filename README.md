@@ -2,68 +2,66 @@
 
 ### The Website Is Sick. Can You Save It?
 
-A **real-time multiplayer** classroom game. One host opens an Emergency Room, up to
-**12 students** join from their own phones or laptops, and each one claims **one sick
-website** to diagnose. Every change is shared instantly: the moment Doctor 1 takes
-Patient 04, everyone else sees `🔒 TAKEN` and can no longer choose it.
+A **real-time multiplayer** classroom game that runs over the internet. One person
+opens an Emergency Room from any device, up to **12 students** join from their own
+phones or laptops **on any network**, and each one claims **one sick website** to
+diagnose. Every change is shared instantly: the moment Doctor 1 takes Patient 04,
+everyone else sees `🔒 TAKEN` and can no longer choose it.
 
 ```
-Landing → Create / Join → Hospital Lobby → 🚨 Emergency Alert → 12 Patient Cards
-→ Choose ONE Patient → Patient LOCKED globally → Private Patient File → Diagnosis
-→ Medical Conference → Reveal → Leaderboard → 🚨 Final Emergency
+                          INTERNET
+                             │
+                  ┌──────────────────────┐
+                  │   ONE Node process   │
+                  │  Express + Socket.IO │
+                  │  all game state here │
+                  └──────────┬───────────┘
+        ┌──────────┬─────────┼─────────┬──────────┐
+        │          │         │         │          │
+      HOST      DOCTOR 1  DOCTOR 2  DOCTOR 3 … DOCTOR 12
+     laptop      laptop    phone     tablet     phone
+      Wi-Fi      Wi-Fi   mobile data  Wi-Fi   mobile data
 ```
+
+Everyone connects to the same server and the same room. Nobody installs anything.
+
+---
+
+## Read this first
+
+**The game only works across networks once the server is deployed.** Running
+`npm start` on your laptop gives you `http://localhost:3000`, and `localhost`
+means *this machine* — it is not an address anyone else can reach, no matter
+which network they are on. Same for `192.168.x.x`: that is your home Wi-Fi's
+private numbering, invisible from outside your house.
+
+There is nothing to fix in the code for this. Deploy the server once
+([§ Deployment](#deployment)), and every link the app produces automatically
+points at the public URL.
 
 ---
 
 ## Table of contents
 
-1. [The stack, and why](#1-the-stack-and-why)
-2. [Quick start](#2-quick-start)
-3. [Playing with several devices](#3-playing-with-several-devices)
-4. [Project structure](#4-project-structure)
-5. [Environment variables](#5-environment-variables)
-6. [How the multiplayer actually works](#6-how-the-multiplayer-actually-works)
-7. [The 12 patients](#7-the-12-patients)
-8. [Running the game — a host's script](#8-running-the-game--a-hosts-script)
-9. [Host control panel](#9-host-control-panel)
-10. [Scoring](#10-scoring)
-11. [Tests](#11-tests)
-12. [Deployment](#12-deployment)
-13. [Troubleshooting](#13-troubleshooting)
-14. [Extending the game](#14-extending-the-game)
+1. [Quick start (local)](#quick-start-local)
+2. [Deployment](#deployment)
+3. [Running a session: host and students](#running-a-session)
+4. [How the multiplayer works](#how-the-multiplayer-works)
+5. [Project structure](#project-structure)
+6. [Environment variables](#environment-variables)
+7. [The 12 patients](#the-12-patients)
+8. [Scoring](#scoring)
+9. [Tests](#tests)
+10. [Troubleshooting](#troubleshooting)
+11. [Extending the game](#extending-the-game)
 
 ---
 
-## 1. The stack, and why
+## Quick start (local)
 
-| Layer | Choice |
-|---|---|
-| Realtime | **Socket.IO** over WebSockets (auto-fallback to polling) |
-| Server | **Node.js + Express**, server-authoritative game state |
-| Storage | In-memory, with periodic **JSON snapshots to disk** for crash recovery |
-| Client | **Vanilla ES modules**, zero build step |
-| Styling | Hand-written CSS with custom properties |
+For developing and for trying it out on one machine.
 
-**Why not Firebase or Supabase?** Both would work, but both need you to create an
-account, provision a project, paste credentials into a config file, and write
-security rules — and if you get the rules wrong, students can read one another's
-patient files or edit their own score. Here the entire game runs in **one Node
-process**, and Node executes JavaScript on a single thread: it never interrupts a
-function halfway through. That property alone makes patient reservation atomic
-without a single database transaction, and it means:
-
-- **no accounts, no API keys, nothing to configure** — `npm install && npm start`
-- **the answer key never leaves the server** unless the host reveals it
-- **works fully offline**, on a classroom Wi-Fi with no internet at all
-
-**Why no front-end framework?** Your students read this code. It is the same HTML,
-CSS and vanilla JS they are learning, just organised.
-
----
-
-## 2. Quick start
-
-**Requirements:** Node.js **18.17 or newer** (`node --version`).
+**Requires Node.js 18.17+** (`node --version`).
 
 ```bash
 cd front-end-hospital
@@ -71,143 +69,189 @@ npm install
 npm start
 ```
 
-That is the whole setup. There is **no database to create**, **no `.env` file
-required**, and **no credentials to obtain anywhere**.
+No database to create, no `.env` needed, no credentials anywhere.
 
-The terminal prints something like:
+| Who | Opens |
+|---|---|
+| Host | `http://localhost:3000/host` |
+| Students | `http://localhost:3000/join` |
 
-```
-  🏥  FRONT-END HOSPITAL — Emergency Room online
-  ─────────────────────────────────────────────
-  Host screen   →  http://localhost:3000/host
-  Join screen   →  http://localhost:3000/join
-  Landing page  →  http://localhost:3000/
+To see the multiplayer without 12 devices: open `/host` in a normal window and
+three or four **incognito windows** at `/join` (incognito windows have separate
+storage, so each is a separate doctor). Click `CHOOSE PATIENT` on the same card
+in two windows at once — one wins, the other is told `Patient already taken`.
 
-  Students on the same Wi-Fi should open:
-    →  http://192.168.0.101:3000/join
-```
+Auto-restart while editing: `npm run dev`.
 
-| Who | Opens | Does |
-|---|---|---|
-| **You (host)** | `http://localhost:3000/host` | A room opens **automatically**, showing a code like `FH-4827` |
-| **Students** | `http://<your-ip>:3000/join` | Type a doctor name + the room code |
+---
 
-For development with auto-restart on file changes:
+## Deployment
+
+### Render — the recommended path
+
+The repo contains `render.yaml`, so this is a five-minute job.
+
+1. Push this project to a GitHub repository.
+2. Go to **[dashboard.render.com](https://dashboard.render.com)** → **New** →
+   **Blueprint**.
+3. Connect the repository. Render reads `render.yaml` and fills everything in:
+   build `npm ci --omit=dev`, start `npm start`, health check `/api/health`.
+4. Click **Apply**. First build takes 1–2 minutes.
+5. You get a public URL, e.g. `https://front-end-hospital.onrender.com`.
+
+That URL is now the game. **Nothing needs configuring** — no API keys, no
+database, no origin settings.
+
+If you would rather not use the Blueprint, create a **Web Service** manually with:
+
+| Setting | Value |
+|---|---|
+| Runtime | Node |
+| Build command | `npm ci --omit=dev` |
+| Start command | `npm start` |
+| Health check path | `/api/health` |
+| Instances | **1 — see the warning below** |
+
+### ⚠️ One instance only
+
+All game state (rooms, patients, who holds what, phases, timers, scores) lives in
+the memory of a **single Node process**. Two instances behind a load balancer
+would be two separate hospitals — the host would land in one, half the students
+in the other, and nothing would appear to sync. Do not enable autoscaling or
+raise the instance count.
+
+Scaling beyond one instance is possible but is a real change: it needs a shared
+store (Redis) plus the Socket.IO Redis adapter. For a classroom of 12, one
+instance is far more capacity than you need.
+
+### ⚠️ Free tier: the server sleeps
+
+Render's free tier stops the instance after ~15 minutes with no traffic. The next
+visitor waits **up to a minute** while it wakes. If twelve students all open the
+link at once on a sleeping server, it looks broken.
+
+**Open `/host` two minutes before class** to wake it, and leave the tab open.
+The app now shows *"Waking the hospital server… this can take up to a minute"*
+instead of a connection error, but the wait is still real.
+
+A paid instance ($7/mo) never sleeps and can also keep snapshots on a disk.
+
+### Other platforms
+
+Anything that runs a long-lived Node process with WebSocket support works:
+**Railway**, **Fly.io**, **a VPS**, **Heroku**.
+
+- Build `npm ci --omit=dev`, start `npm start`.
+- `PORT` is read from the environment; the server binds `0.0.0.0` so it is
+  reachable inside a container.
+
+**Will NOT work:** GitHub Pages, Netlify, Vercel static hosting, or any
+static-file host. There is a real server here that must stay running — a static
+host has nowhere to run it.
+
+### Docker
 
 ```bash
-npm run dev
+docker build -t front-end-hospital .
+docker run -p 3000:3000 -e PERSIST=true -v feh-data:/app/.data front-end-hospital
+```
+
+### Behind Nginx (VPS only)
+
+WebSockets need the upgrade headers forwarded:
+
+```nginx
+location / {
+  proxy_pass http://127.0.0.1:3000;
+  proxy_http_version 1.1;
+  proxy_set_header Upgrade    $http_upgrade;
+  proxy_set_header Connection "upgrade";
+  proxy_set_header Host       $host;
+  proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto $scheme;
+  proxy_read_timeout 3600s;
+}
 ```
 
 ---
 
-## 3. Playing with several devices
+## Running a session
 
-### On the same Wi-Fi (a normal classroom)
+Replace `DOMAIN` with your deployed URL.
 
-1. Run `npm start` on your laptop.
-2. Read the LAN address it printed, e.g. `http://192.168.0.101:3000/join`.
-3. Write that address (or the room code) on the board. Students open it on their
-   phones. **They install nothing.**
+### The host
 
-> **Windows firewall:** the first run may pop up a firewall prompt. Allow Node.js
-> on **private networks**, or students will not be able to connect. If you missed
-> the prompt: *Windows Security → Firewall & network protection → Allow an app
-> through firewall → Node.js → tick Private*.
+Open **`https://DOMAIN/host`** on a laptop.
 
-### Testing it alone, right now
+You will see **CREATE GAME**. Press it once — a room opens with a code like
+`FH-4827` and a join link ready to copy.
 
-You do not need 12 devices to see the multiplayer working:
+The host does **not** need to be the person who deployed the project, and nothing
+runs on their machine. Send `https://DOMAIN/host` to a colleague and they can run
+the whole session from their own device on their own network.
 
-1. Open `http://localhost:3000/host` in a normal window.
-2. Open **3 or 4 incognito / private windows** at `http://localhost:3000/join`.
-   Incognito windows have separate `localStorage`, so each is a separate doctor.
-   (Different browsers — Chrome, Edge, Firefox — work too.)
-3. Join with a different name in each.
-4. Arrange the windows side by side, press **START EMERGENCY** on the host, and
-   click **CHOOSE PATIENT** on the same card in two windows at once.
+**The host key.** In the room panel there is a collapsed section, *🔑 Host key —
+keep private*. It contains a link like
+`https://DOMAIN/host?room=FH-4827&key=…`. Opening that link on **another
+device** moves control of the running room there. Use it if you switch laptops
+mid-session or your browser loses its storage.
 
-One wins. The other gets `Patient already taken.` — instantly, in every window.
+> Treat that link like a password. Anyone who opens it becomes the host of your
+> room. Never paste it in the class chat — the students' link is the other one.
 
----
+### The students
 
-## 4. Project structure
+Send them **`https://DOMAIN/join`** plus the room code, or the direct link which
+fills the code in for them. All three of these work:
 
 ```
-front-end-hospital/
-├── server/
-│   ├── index.js              Express + HTTP entry point, static files, /api routes
-│   ├── realtime.js           Every Socket.IO event; identity & permission checks
-│   ├── config.js             Environment configuration with defaults
-│   ├── game/
-│   │   ├── rooms.js          THE source of truth: rooms, atomic claim, state views
-│   │   ├── patients.js       The 12 cases + the final patient + answer keys
-│   │   ├── phases.js         The 8 phases
-│   │   └── scoring.js        Rubric, auto-grader suggestions, leaderboard
-│   └── util/
-│       ├── ids.js            Room codes, public ids, secret tokens
-│       └── sanitize.js       Input cleaning for anything a student types
-│
-├── public/                   Served as-is. No build step.
-│   ├── index.html            Landing page
-│   ├── host.html             Host control panel
-│   ├── join.html             Student join screen
-│   ├── play.html             Doctor station
-│   ├── 404.html
-│   ├── css/
-│   │   ├── theme.css         Design tokens, base layer
-│   │   ├── components.css    Panels, patient cards, tables, leaderboard…
-│   │   └── animations.css    ECG, sirens, cinematics, confetti canvas
-│   └── js/
-│       ├── bus.js            Shared clock + connection status (no transport)
-│       ├── net.js            The socket, promise-based emit, session storage
-│       ├── ui.js             DOM helpers, toasts, the synchronised countdown
-│       ├── evidence.js       Renders code / console / files / screenshots
-│       ├── cinematic.js      The Emergency Alert sequence
-│       ├── sound.js          Web-Audio cues (mutable, no audio files)
-│       ├── confetti.js       Canvas particle burst
-│       ├── join.js           Join screen logic
-│       ├── play.js           Doctor station — all 8 phase screens
-│       └── host.js           Host control panel
-│
-├── test/
-│   ├── multiplayer.test.js   Real sockets: races, privacy, permissions, resume
-│   ├── render.test.js        Evidence rendering + highlighter safety
-│   ├── screens.test.js       Real server projections → real player screens
-│   └── host-screens.test.js  …and the host panel
-│
-├── Dockerfile
-├── render.yaml
-├── .env.example
-└── package.json
+https://DOMAIN/join/FH-4827
+https://DOMAIN/join?room=FH-4827
+https://DOMAIN/join?code=FH-4827
 ```
 
----
+They enter a doctor name, press **JOIN HOSPITAL**, and wait in the lobby.
 
-## 5. Environment variables
+### The eight phases
 
-**All optional.** Copy `.env.example` to `.env` only if you want to change something.
+The host drives the room with the **`Next phase →`** button; everyone else
+follows automatically.
 
-| Variable | Default | Meaning |
+| # | Phase | What the host does |
 |---|---|---|
-| `PORT` | `3000` | Port to listen on |
-| `PUBLIC_ORIGIN` | *(empty)* | Only needed behind a proxy that rewrites the host header |
-| `MAX_PLAYERS` | `12` | Doctors per room (hard ceiling is 12) |
-| `MIN_PLAYERS` | `2` | Minimum before **START EMERGENCY** unlocks |
-| `ROOM_TTL_MINUTES` | `240` | How long an empty room survives before cleanup |
-| `DATA_DIR` | `.data` | Where crash-recovery snapshots are written |
-| `PERSIST` | `true` | Set `false` for pure in-memory mode |
+| 1 | Waiting Room | Wait for doctors, then **🚨 START EMERGENCY** |
+| 2 | Emergency Alert | Let the ~9s cinematic play, then **`Next phase →`** |
+| 3 | Patient Selection | Optionally start a 1-minute timer; wait for 12/12 |
+| 4 | Diagnosis | Start a 10-minute timer |
+| 5 | Medical Conference | **🔀 Shuffle order**, **⏱ 60s**, **Next presenter →** |
+| 6 | Reveal | **Reveal** one patient at a time; score in **📋 Reports** |
+| 7 | Leaderboard | Podium and confetti fire automatically |
+| 8 | Final Patient | One site, five faults, everyone at once |
+|  | End | **🏁 End game** |
 
-**There are no secrets, no API keys and no third-party credentials anywhere in
-this project.**
+Nothing advances by itself. After **End game**, stop pressing buttons.
 
 ---
 
-## 6. How the multiplayer actually works
+## How the multiplayer works
 
-### The reservation is atomic — structurally, not by luck
+### Nothing is hard-coded to any machine
+
+The client opens its socket with `io()` — **no URL**. Socket.IO connects back to
+the exact origin that served the page. The same build talks to `localhost` when
+served from localhost and to your Render domain when served from there. Every
+shareable link is built from `window.location.origin` for the same reason.
+
+There is no address, IP or hostname anywhere in the client code. You can verify:
+
+```bash
+grep -rn "localhost\|127.0.0.1\|192.168" public/
+```
+
+### The reservation is atomic by construction
 
 All 12 patient slots live in one `Map` in one Node process, and the claim runs
-inside one synchronous function ([`server/game/rooms.js`](server/game/rooms.js)):
+inside one synchronous function (`server/game/rooms.js`):
 
 ```js
 // ── the critical section ──
@@ -215,58 +259,125 @@ if (slot.takenBy && slot.takenBy !== player.id) {
   fail('TAKEN', `Patient already taken — Doctor ${owner.name} got there first.`);
 }
 slot.takenBy = player.id;
-slot.takenAt = now();
 player.patientId = slot.id;
 // ── end critical section ──
 ```
 
-Node never interrupts a function mid-execution. Two clicks in the same
-millisecond are still two separate turns of the event loop, so the second one
-sees `takenBy` already set. There is no window to lose. This is verified by a
-test that fires **eight simultaneous claims at the same patient** and asserts
-exactly one succeeds.
+Node never interrupts a function mid-execution, so two clicks in the same
+millisecond are still two separate turns of the event loop and the second one
+sees `takenBy` already set. A test fires **eight simultaneous claims** at one
+patient and asserts exactly one succeeds.
 
 ### Clients cannot lie about who they are
 
 At join time the server issues a public `playerId` and a **secret token**. The
-token is stored in that browser's `localStorage` and never appears in any
-broadcast. The socket's identity is bound once, from the token, and every
-handler reads it from `socket.data` — never from the message:
+token is stored in that browser and never appears in any broadcast. A socket's
+identity is bound once, from the token, and every handler reads it from
+`socket.data` — never from the message. So:
 
-- a player asking to submit a diagnosis cannot say *whose* diagnosis it is
-- a player emitting `host:score` is rejected with `NOT_HOST`
-- knowing the room code is not enough to become the host
+- a player cannot submit a diagnosis as someone else;
+- a player emitting `host:score` is refused with `NOT_HOST`;
+- **knowing the room code is not enough to become the host** — the host token is
+  a separate secret, and a test asserts eleven different host commands are all
+  refused for a player who knows the code.
 
-### Students only receive what they are allowed to see
+### Students only receive what they may see
 
-The server keeps **two projections** of a room. A player's payload contains
-their own patient file and nothing else — no other doctor's evidence, no
-submissions, and no answer key at all. The host's payload contains everything.
-This is enforced at the point the state is built, not by hiding things in CSS.
-Tested: a player's entire wire payload is searched for the other patient's
-evidence and disease names.
+The server keeps **two projections** of a room. A player's payload contains their
+own patient file and nothing else — no other doctor's evidence, no submissions,
+no answer key. The host's payload contains everything. Enforced where state is
+built, not by hiding things in CSS.
 
 ### One clock for the whole room
 
-The server broadcasts an **absolute deadline** (`endsAt`), never a countdown
-value. Each browser measures its own offset from the server clock with a small
-round-trip ping and renders `endsAt − serverNow()`. A phone whose system clock
-is four minutes off still shows the same number as the projector.
+The server broadcasts an **absolute deadline**, never a countdown. Each browser
+measures its own offset from the server clock with a small round-trip ping. A
+phone whose system clock is four minutes off still shows the same number as the
+projector.
 
-### A refresh costs nothing
+### Rooms are isolated
 
-Disconnecting does **not** remove a player. Their patient stays reserved, their
+Each room is keyed by its code and each socket joins only that room's channels. A
+host token is bound to one room, not to "being a host". Tested.
+
+### A refresh or a dropped connection costs nothing
+
+Disconnecting does **not** remove a player: their patient stays reserved, their
 diagnosis stays filed, their score stays. On reconnect the browser presents its
-token again and walks straight back into the room, at the right phase. The
-server also snapshots every room to `.data/rooms.json` every few seconds, so
-even restarting the server mid-class does not end the game.
+token again and walks straight back in, at the right phase. This is why a phone
+locking its screen, or a student walking through a dead spot, is a non-event.
+
+### Where state does *not* live
+
+`localStorage` holds only **identity** — room code, player id, secret token, and
+the sound preference. No game state. Clearing it logs you out; it cannot
+desynchronise the game, because the browser is not the source of truth for
+anything.
 
 ---
 
-## 7. The 12 patients
+## Project structure
 
-Students see only `PATIENT 01 · CLASSIFIED` until they claim a case. The disease
-names below are **never shown** to them until the Reveal phase.
+```
+front-end-hospital/
+├── server/
+│   ├── index.js              Express, static files, /api routes, 0.0.0.0 bind
+│   ├── realtime.js           Every Socket.IO event; identity & permission checks
+│   ├── config.js             Environment configuration with defaults
+│   ├── game/
+│   │   ├── rooms.js          THE source of truth: rooms, atomic claim, state views
+│   │   ├── patients.js       The 12 cases + the final patient + answer keys
+│   │   ├── phases.js         The 8 phases
+│   │   └── scoring.js        Rubric, auto-grader suggestions, leaderboard
+│   └── util/{ids,sanitize}.js
+│
+├── public/                   Served as-is. No build step.
+│   ├── index.html  host.html  join.html  play.html  404.html
+│   ├── css/{theme,components,animations}.css
+│   └── js/
+│       ├── bus.js            Shared clock + connection status (no transport)
+│       ├── net.js            The socket, URL helpers, session storage
+│       ├── ui.js             DOM helpers, toasts, the synchronised countdown
+│       ├── evidence.js       Renders code / console / files / screenshots
+│       ├── cinematic.js  sound.js  confetti.js
+│       └── join.js  play.js  host.js
+│
+├── test/
+│   ├── deployment.test.js    Spawns the real server; networking + the 14 checks
+│   ├── multiplayer.test.js   Races, privacy, permissions, resume
+│   ├── render.test.js        Evidence rendering, highlighter safety, URL helpers
+│   ├── screens.test.js       Real server projections → real player screens
+│   ├── host-screens.test.js  …and the host dashboard
+│   └── host-entry.test.js    The /host entry screen and host-key recovery
+│
+├── Dockerfile  render.yaml  .env.example  package.json
+```
+
+---
+
+## Environment variables
+
+**All optional.** Copy `.env.example` to `.env` only to change something.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `PORT` | `3000` | Injected by the platform. Never hard-code it. |
+| `HOST` | `0.0.0.0` | Bind address. **Do not change** — a container needs `0.0.0.0`. |
+| `MAX_PLAYERS` | `12` | Doctors per room (hard ceiling 12) |
+| `MIN_PLAYERS` | `2` | Minimum before **START EMERGENCY** unlocks |
+| `ROOM_TTL_MINUTES` | `240` | How long an empty room survives |
+| `PERSIST` | `true` | Set **`false`** on Render free — its disk is ephemeral |
+| `DATA_DIR` | `.data` | Where snapshots are written when `PERSIST=true` |
+| `PUBLIC_ORIGIN` | *(empty)* | Cosmetic only — prints your real URL in the boot log. The browser never needs it. |
+
+No secrets, no API keys, no third-party credentials anywhere in this project.
+
+---
+
+## The 12 patients
+
+Students see only `PATIENT 01 · CLASSIFIED` until they claim a case. The
+condition names below are **never shown** to them until Reveal.
 
 | # | Patient | Condition | Evidence they get |
 |---|---|---|---|
@@ -285,74 +396,17 @@ names below are **never shown** to them until the Reveal phase.
 | 🚨 | **MEDCART** | **Five faults at once** | Everything, for everyone |
 
 Evidence is **deliberately not uniform**. Some cases are a screenshot only, some
-are pure code, some are a folder tree, some are a single console error — because
-reading whichever clue you happen to be handed *is* the skill.
+are pure code, some a folder tree, some a single console error — because reading
+whichever clue you happen to be handed *is* the skill.
 
-> Screenshots are rendered as live HTML mocks inside a sandboxed `<iframe>`
-> rather than shipped as PNGs. They stay crisp on every display, the repo stays
-> tiny, and there is nothing that can 404.
-
----
-
-## 8. Running the game — a host's script
-
-**Phase 1 · Waiting Room.** Open `/host`. A room opens by itself. Read the code
-out, or share the join link. Watch doctors appear live.
-
-**Phase 2 · Emergency Alert.** Press **🚨 START EMERGENCY**. A short cinematic
-plays on *every* screen at once. Let it run — it is the moment the room goes quiet.
-
-**Phase 3 · Patient Selection.** Advance to Patient Selection. Twelve classified
-cards appear everywhere. Start a **90-second timer** from the sidebar for pressure.
-Cards flip to `🔒 TAKEN` in real time. Say nothing; let them discover that
-first-click-wins is real.
-
-**Phase 4 · Diagnosis.** Advance. Each doctor now sees a file only they can see.
-Start a **10-minute timer**. Their answers autosave as drafts.
-
-**Phase 5 · Medical Conference.** Advance. Use **🔀 Shuffle order**, then give
-each presenter **⏱ 60s**. The current presenter's own screen says *"Your turn to
-present"* with their notes laid out in the order they should say them.
-
-**Phase 6 · Reveal.** Go to the **Reveal** tab and reveal **one patient at a
-time** while you discuss it. Each reveal shows the model answer, that doctor's
-answer, and their score side by side.
-
-**Phase 7 · Leaderboard.** Advance. Podium, confetti, per-doctor cards.
-
-**Phase 8 · Final Patient.** Advance. One site, five faults, everyone at once.
-Start a 10-minute timer. Collect findings in the **Final patient** tab, then
-reveal the post-op report.
+> Screenshots are live HTML mocks inside a sandboxed `<iframe>`, not PNGs. They
+> stay crisp on every display and there is nothing that can 404.
 
 ---
 
-## 9. Host control panel
+## Scoring
 
-Everything in the requirements, in one screen:
-
-- **Create Room** (automatic on opening `/host`), copyable code and join link
-- **Start / next phase**, plus a clickable rail to jump to any of the 8 phases
-- **Pause / Resume** — every student screen switches to a paused state
-- **Lock patient selection** · **Allow re-picking** · **Re-open a diagnosis**
-  (globally or for one named doctor)
-- **Reset a patient** — frees it for someone else
-- **Remove a doctor**
-- **Shared timer**: presets, custom seconds, ±30s, pause, resume, stop
-- **Ward view** — all 12 patients, who holds each, who has submitted
-- **Doctors view** — live roster, connection state, per-doctor actions
-- **Reports & scoring** — every submission next to the answer key, with the
-  0–5 rubric pickers, bonus, approve / reject, and a written note
-- **Reveal** — one patient at a time, or all at once
-- **Leaderboard** — full breakdown table
-- **Final patient** — team/individual mode, collected findings, answer key
-- **Log** — a timestamped record of everything that happened in the room
-- **Restart** (keep doctors or clear the room) · **End game** · **🎉 confetti**
-
----
-
-## 10. Scoring
-
-Grading is a **human act**. The host awards points:
+Grading is a human act. The host awards points:
 
 | Criterion | Points |
 |---|---|
@@ -362,113 +416,133 @@ Grading is a **human act**. The host awards points:
 | Good Explanation | +5 |
 | **Maximum** | **20 per doctor** |
 
-Plus an optional ±5 bonus, an Approve/Reject mark, and a free-text note the
-student sees at Reveal.
+Plus an optional ±5 bonus and a note the student sees at Reveal.
 
 **✨ Suggest score** compares the answer against the case's keyword lists and
-pre-fills a *suggestion* — deliberately conservative, and it never writes a score
-on its own. The host always has the last word. (There is a test asserting that
-asking for a suggestion does not grade anybody.)
+fills the four rows in for you to adjust. It is deliberately conservative, and a
+test asserts that *asking* for a suggestion never grades anybody by itself.
 
 ---
 
-## 11. Tests
+## Tests
 
 ```bash
 npm test
 ```
 
-44 tests, no mocks where it matters — the multiplayer suite runs a real server
-and real sockets. Highlights:
+**72 tests.** The important ones use real sockets against a real server — no
+mocks where mocking would hide the answer.
 
-- `THE RACE: eight doctors slam the same patient — exactly one wins`
-- `a player never receives another doctor's patient file or any answer key`
-- `a player cannot act as the host`
-- `a stolen player id without the token is refused`
-- `a refresh restores identity, patient, diagnosis and score`
-- `the shared timer is expressed as an absolute server deadline`
-- `highlight() never emits live markup from a snippet`
-- `each case is complete, distinct and keeps its disease name out of the file`
+`test/deployment.test.js` spawns the actual `node server/index.js`, then connects
+to it **over a non-loopback network interface** with a foreign `Origin` header,
+from clients that share no storage:
 
-The screen tests are worth knowing about: they take the **real projection the
-server would send** and push it through the **real client renderers**, so a
-mismatch between server and UI fails the build rather than the lesson.
+- the server binds a real interface, not just localhost
+- 12 independent clients share one room; the 13th is refused
+- two doctors grab the same patient at once — exactly one wins
+- a phase change reaches every doctor
+- the timer arrives as one identical deadline everywhere
+- a submitted diagnosis reaches the host; a reveal reaches the students
+- a refresh, and a hard connection drop, both recover with the patient intact
+- a doctor is refused on **eleven** host commands, and on the room code alone
+- the host role moves to a different device via the host key
+- polling-only clients work (for networks that block WebSocket)
+- two rooms on one server stay completely isolated
+
+**What the tests do not prove:** they run on one machine, so they say nothing
+about the public internet, NAT or a mobile carrier. Only a real deployment proves
+that — see the checklist in [§ Troubleshooting](#troubleshooting).
 
 ---
 
-## 12. Deployment
+## Troubleshooting
 
-The game needs **WebSockets** and **a single instance** (state lives in one
-process — do not scale it to 2+ replicas without adding a shared store).
+### Connection refused / the page will not load
 
-### Render (free tier works)
+| Cause | Fix |
+|---|---|
+| You sent a `localhost` or `192.168.x.x` link | Those are not internet addresses. Deploy, and share the public URL. |
+| Server not deployed yet | See [§ Deployment](#deployment). |
+| Deployed but bound to `127.0.0.1` | `HOST` must be `0.0.0.0` (the default). Do not override it. |
+| Wrong port | Never hard-code a port — the platform injects `PORT`. |
 
-The repo contains `render.yaml`. In Render: **New → Blueprint → point at the
-repo**. Or manually:
+### The server is sleeping
 
-- Build: `npm ci --omit=dev`
-- Start: `node server/index.js`
-- Health check: `/api/health`
+Free tiers stop an idle instance. The first request waits up to a minute. The app
+says *"Waking the hospital server…"* rather than showing an error. **Open `/host`
+two minutes before class.** To remove the behaviour entirely, use a paid instance.
 
-### Railway / Fly.io / any Node host
+### WebSocket problems
 
-- Build: `npm ci --omit=dev`
-- Start: `node server/index.js`
-- Set `PORT` if the platform does not inject it.
+Symptom: it works at home but not on the university network, or it connects then
+drops repeatedly.
 
-### Docker
+The client already falls back to HTTP long-polling automatically when the
+WebSocket upgrade is blocked — a test covers polling-only clients. If you are
+behind your own Nginx, the usual cause is missing upgrade headers; see the config
+in [§ Deployment](#deployment).
 
-```bash
-docker build -t front-end-hospital .
-docker run -p 3000:3000 -v feh-data:/app/.data front-end-hospital
+Check which transport is in use — in DevTools console on the game page:
+
+```js
+// "websocket" or "polling" — both are fine
 ```
+Open the Network tab and filter for `socket.io`.
 
-### Behind Nginx (WebSockets need the upgrade headers)
+### CORS errors
 
-```nginx
-location / {
-  proxy_pass http://127.0.0.1:3000;
-  proxy_http_version 1.1;
-  proxy_set_header Upgrade    $http_upgrade;
-  proxy_set_header Connection "upgrade";
-  proxy_set_header Host       $host;
-  proxy_read_timeout 3600s;
-}
-```
+Should not happen: the client is served by the same server it connects to, so
+every connection is same-origin, and the server reflects the requesting origin
+anyway. If you see a CORS error, you are almost certainly opening the HTML file
+from disk (`file://…`) instead of from the server. Open the `https://DOMAIN/...`
+URL.
 
-> On a free/ephemeral host, set `PERSIST=false` — the filesystem is wiped on
-> every restart, so snapshots buy nothing there.
+### "Room not found" / "No emergency room with that code"
+
+| Cause | Fix |
+|---|---|
+| Typo — codes are always `FH-` + 4 digits | Re-check, or use the join link |
+| The server restarted (deploy, crash, or free-tier sleep) with `PERSIST=false` | Rooms are in memory. The host opens `/host` and creates a new room. |
+| Room expired | Empty rooms are swept after `ROOM_TTL_MINUTES` (default 4 hours). |
+
+### The host lost their room / host disconnected
+
+- **Brief disconnect:** nothing to do. The host console re-presents its token on
+  every reconnect and control returns by itself.
+- **Different device, or cleared browser data:** use the **🔑 Host key** link
+  from the room panel, or paste the room code + key into *"Already running a
+  room?"* on `/host`.
+- **No key saved and the browser is gone:** the room keeps running but is
+  unreachable. Students keep their patients and diagnoses; a new host cannot take
+  over. Save the host key at the start of a session if this matters.
+
+While the host is away the game simply pauses — students keep their patients,
+their work and their place, and everything resumes when the host returns.
+
+### Students see each other but not the host's phase changes
+
+Almost always **two instances**. Check the platform shows exactly one running
+instance and autoscaling is off.
+
+### Nothing syncs / everyone seems alone
+
+Confirm everybody is on the **same domain**. A `www.` vs apex mismatch, or one
+person still on an old preview URL, puts them on different servers.
 
 ---
 
-## 13. Troubleshooting
-
-| Symptom | Cause | Fix |
-|---|---|---|
-| Students cannot reach the LAN address | Windows firewall | Allow Node.js on **private** networks |
-| `EADDRINUSE` on start | Port 3000 is busy | `PORT=3001 npm start` |
-| "No emergency room with that code" | Server restarted with `PERSIST=false`, or a typo | Re-open `/host` for a fresh code |
-| Everyone is the same doctor in one browser | Tabs share `localStorage` | Use incognito windows or different browsers |
-| Nothing happens on the students' screens | They are on a different network (guest Wi-Fi) | Put every device on the same network |
-| No sound | Browsers block audio until a click | Click anywhere once; 🔊 in the top bar toggles it |
-| Copy link button does nothing | `http://` on a LAN IP is not a secure context | It falls back automatically; otherwise select the field and copy manually |
-
----
-
-## 14. Extending the game
+## Extending the game
 
 **Add a 13th case:** append an object to `PATIENTS` in
-[`server/game/patients.js`](server/game/patients.js) — `symptoms`, `evidence`
-(mix the kinds!), and an `answer` with `keywords`. Nothing else needs touching;
-the ward, the reveal and the host panel all read from that array.
+`server/game/patients.js` — `symptoms`, `evidence` (mix the kinds!), and an
+`answer` with `keywords`. Nothing else needs touching.
 
-**Change the rubric:** edit `RUBRIC` in
-[`server/game/scoring.js`](server/game/scoring.js). The host's point pickers and
-the leaderboard columns follow it automatically.
+**Change the rubric:** edit `RUBRIC` in `server/game/scoring.js`. The host's
+point pickers and the leaderboard columns follow automatically.
 
-**Team mode for the final patient:** the toggle and the `mode` field already
-exist and are broadcast to every client; grouping doctors into teams is the
-piece left to write.
+**More than one instance:** add Redis plus `@socket.io/redis-adapter`, and move
+the room `Map` in `server/game/rooms.js` into Redis. Only worth it above a few
+hundred concurrent players.
 
 ---
 

@@ -7,7 +7,9 @@
  *     re-join and does not lose the patient you already claimed.
  */
 
-import { send, saveSession, loadSession, socket } from './net.js';
+import {
+  send, saveSession, loadSession, socket, consumeUrlParams,
+} from './net.js';
 import { $, toast, installConnectionBanner } from './ui.js';
 import { play } from './sound.js';
 
@@ -22,11 +24,12 @@ const submitBtn = $('#submit');
 
 /* ── prefill ─────────────────────────────────────────────────────────────── */
 
-const fromPath = window.location.pathname.match(/^\/join\/([A-Za-z]{0,2}-?\d{4})$/)?.[1];
-const fromQuery = new URLSearchParams(window.location.search).get('code');
+// Accepts every shape a room link gets pasted in:
+//   /join/FH-4827   ·   /join?room=FH-4827   ·   /join?code=FH-4827
+const { room: fromUrl } = consumeUrlParams();
 const prior = loadSession();
 
-const prefillCode = fromPath || fromQuery || prior?.roomCode || '';
+const prefillCode = fromUrl || prior?.roomCode || '';
 if (prefillCode) codeInput.value = formatCode(prefillCode);
 if (prior?.name) nameInput.value = prior.name;
 

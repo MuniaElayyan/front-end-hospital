@@ -34,11 +34,12 @@ if (!session || session.role !== 'player') {
 }
 
 socket.on('connect_error', () => {
-  if (!state) {
-    mount(stage, el('div', { class: 'panel center', style: { padding: '48px 20px' } },
-      el('h3', { text: 'Cannot reach the hospital server' }),
-      el('p', { class: 'dim', text: 'Check that the host is still running the game, then refresh.' })));
-  }
+  if (state) return; // already in the game; the connection banner covers it
+  mount(stage, el('div', { class: 'panel center', style: { padding: '48px 20px' } },
+    el('div', { class: 'spinner', style: { margin: '0 auto 18px' } }),
+    el('h3', { text: 'Reaching the hospital…' }),
+    el('p', { class: 'dim', style: { maxWidth: '44ch', margin: '0 auto' },
+      text: 'This can take up to a minute the first time, while the server wakes up. Keep this page open — it will continue by itself.' })));
 });
 
 // Runs on EVERY connect. A reconnect gives us a fresh socket the server does

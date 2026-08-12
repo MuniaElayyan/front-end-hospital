@@ -52,8 +52,14 @@ before(async () => {
   globalThis.document = doc;
   globalThis.Node = dom.Node;
   globalThis.HTMLElement = dom.HTMLElement;
-  dom.window.location = { origin: 'http://localhost:3000', pathname: '/host', search: '' };
+  dom.window.location = {
+    href: 'http://localhost:3000/host',
+    origin: 'http://localhost:3000',
+    pathname: '/host',
+    search: '',
+  };
   globalThis.location = dom.window.location;
+  dom.window.history = { replaceState() {} };
 
   const store = new Map();
   globalThis.localStorage = {
@@ -61,6 +67,13 @@ before(async () => {
     setItem: (k, v) => store.set(k, String(v)),
     removeItem: (k) => store.delete(k),
   };
+  // Seed a host session BEFORE host.js is imported — this file exercises the
+  // dashboard of a host who already owns a room. The no-session entry screen
+  // is covered separately in host-entry.test.js.
+  store.set('feh.session.v1', JSON.stringify({
+    role: 'host', roomCode: 'FH-0001', hostToken: 'seeded-host-token-for-tests-0123456789',
+    savedAt: Date.now(),
+  }));
   globalThis.matchMedia = () => ({ matches: true, addEventListener() {} });
   dom.window.matchMedia = globalThis.matchMedia;
   globalThis.requestAnimationFrame = () => 0;
@@ -95,6 +108,21 @@ test('the lobby offers START EMERGENCY and shows the shareable link', () => {
   const linkField = [...stage.querySelectorAll('input')].find((i) => i.value?.includes('/join/'));
   assert.ok(linkField, 'a copyable join link is rendered');
   assert.equal(linkField.value, `http://localhost:3000/join/${room.code}`);
+
+  // Both links are built from window.location.origin — deploy anywhere and
+  // they point at the deployment, with nothing to configure.
+  assert.ok(linkField.value.startsWith('http://localhost:3000'));
+});
+
+test('the host key link is offered, kept separate, and marked private', () => {
+  const stage = paint();
+  const keyField = [...stage.querySelectorAll('input')].find((i) => i.value?.includes('/host?room='));
+  assert.ok(keyField, 'a host recovery link exists');
+  assert.match(keyField.value, /\/host\?room=FH-\d{4}&key=.{20,}/, 'it carries the room and the token');
+
+  const details = [...stage.querySelectorAll('details')].find((d) => /Host key/.test(d.textContent));
+  assert.ok(details, 'it is collapsed behind a disclosure, not sitting next to the join link');
+  assert.match(details.textContent, /do not share it with students/i);
 });
 
 test('the phase rail lists all eight phases and marks the current one', () => {

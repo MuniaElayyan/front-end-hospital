@@ -11,6 +11,12 @@ import * as R from './game/rooms.js';
 
 const app = express();
 app.disable('x-powered-by');
+
+// Render, Railway, Fly and every reverse proxy terminate TLS in front of us and
+// forward the original scheme/host in X-Forwarded-*. Without this, req.protocol
+// reports "http" on an https deployment and req.ip is the proxy, not the client.
+app.set('trust proxy', 1);
+
 app.use(express.json({ limit: '64kb' }));
 
 // ── static client ───────────────────────────────────────────────────────────
@@ -51,9 +57,22 @@ app.get('/api/room/:code', (req, res) => {
   });
 });
 
-// Pretty join links: /join/FH-4827  →  join screen with the code pre-filled.
-app.get('/join/:code', (req, res) => {
+// Pretty join links. All three of these serve the same screen, with the code
+// pre-filled, because links get pasted into chat apps in whatever shape people
+// happen to copy them:
+//     /join/FH-4827
+//     /join?room=FH-4827
+//     /join?code=FH-4827
+app.get('/join/:code', (_req, res) => {
   res.sendFile(path.join(config.publicDir, 'join.html'));
+});
+
+// The host console. Serving it explicitly (rather than leaning on the static
+// middleware's `extensions` guess) keeps /host working identically whether or
+// not a query string is attached — /host?room=FH-4827&key=… is how a host
+// re-opens an existing room from a different device.
+app.get('/host', (_req, res) => {
+  res.sendFile(path.join(config.publicDir, 'host.html'));
 });
 
 app.use((req, res) => {
@@ -87,24 +106,37 @@ function lanAddresses() {
   return out;
 }
 
-server.listen(config.port, () => {
+server.listen(config.port, config.host, () => {
+  const deployed = Boolean(config.publicOrigin);
+  const base = config.publicOrigin || `http://localhost:${config.port}`;
+
   const lines = [
     '',
     '  🏥  FRONT-END HOSPITAL — Emergency Room online',
     '  ─────────────────────────────────────────────',
-    `  Host screen   →  http://localhost:${config.port}/host`,
-    `  Join screen   →  http://localhost:${config.port}/join`,
-    `  Landing page  →  http://localhost:${config.port}/`,
+    `  Listening on   ${config.host}:${config.port}`,
+    '',
+    `  Host console   →  ${base}/host`,
+    `  Join screen    →  ${base}/join`,
+    `  Landing page   →  ${base}/`,
   ];
-  const lan = lanAddresses();
-  if (lan.length) {
-    lines.push('', '  Students on the same Wi-Fi should open:');
-    lan.forEach((ip) => lines.push(`    →  http://${ip}:${config.port}/join`));
+
+  if (!deployed) {
+    const lan = lanAddresses();
+    if (lan.length) {
+      lines.push(
+        '',
+        '  Same Wi-Fi only (these addresses do NOT work over the internet —',
+        '  deploy the server for that; see README § Deployment):',
+      );
+      lan.forEach((ip) => lines.push(`    →  http://${ip}:${config.port}/join`));
+    }
   }
+
   lines.push(
     '',
     `  Doctors per room: ${config.minPlayers}–${config.maxPlayers}`,
-    `  Snapshots: ${config.persist ? config.dataDir : 'disabled'}`,
+    `  Snapshots: ${config.persist ? config.dataDir : 'disabled (in-memory only)'}`,
     '',
   );
   console.log(lines.join('\n'));

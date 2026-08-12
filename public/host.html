@@ -17,9 +17,20 @@
       align-items: start;
     }
     .host-side { position: sticky; top: 76px; display: grid; gap: var(--gap); }
+
+    /* Tablet and below: one column. Two things change so the console stays
+       usable rather than turning into a long scroll before you reach anything.
+       The control column moves BELOW the working area, because the tabs are
+       what you touch every minute while the room code stays permanently
+       visible in the sticky top bar anyway; and the control cards sit side by
+       side on a tablet so they take half the height. */
     @media (max-width: 980px) {
       .host-grid { grid-template-columns: 1fr; }
-      .host-side { position: static; }
+      .host-side { position: static; order: 2; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); align-items: start; }
+      .host-grid > section { order: 1; }
+    }
+    @media (max-width: 560px) {
+      .host-side { grid-template-columns: 1fr; }
     }
   </style>
 </head>

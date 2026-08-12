@@ -7,7 +7,8 @@
  */
 
 import {
-  socket, send, saveSession, loadSession, clearSession, joinUrl, copyToClipboard,
+  socket, send, saveSession, loadSession, clearSession,
+  joinUrl, hostUrl, consumeUrlParams, copyToClipboard,
 } from './net.js';
 import {
   $, el, mount, toast, toastError, installConnectionBanner, createClock,
@@ -28,28 +29,137 @@ let session = loadSession();
 let state = null;
 let tab = 'ward';
 
-/* ── boot: resume an existing room, or open a new one ────────────────────── */
-//  This runs on EVERY connect, not just the first. Socket.IO hands us a brand
-//  new socket after a drop, and the server has no idea who it is until we
-//  present the host token again — without this, a host who loses Wi-Fi for ten
-//  seconds comes back as a spectator with dead buttons.
+/* ── boot ────────────────────────────────────────────────────────────────── */
 
+/**
+ * A host link (/host?room=FH-4827&key=…) always wins over whatever this browser
+ * had stored. That link is what makes the host role portable: it can be opened
+ * on a different laptop, on a phone, or in a private window, and control of the
+ * running room moves there. consumeUrlParams() wipes the token out of the
+ * address bar immediately after reading it.
+ */
+const fromLink = consumeUrlParams();
+if (fromLink.room && fromLink.key) {
+  session = { role: 'host', roomCode: fromLink.room, hostToken: fromLink.key };
+}
+
+/**
+ * Runs on EVERY connect, not just the first. Socket.IO hands us a brand new
+ * socket after a drop and the server has no idea who it is until we present the
+ * host token again — without this, a host who loses Wi-Fi for ten seconds comes
+ * back as a spectator with dead buttons.
+ */
 socket.on('connect', async () => {
   if (session?.role === 'host' && session.hostToken) {
     try {
       await send('host:resume', { roomCode: session.roomCode, hostToken: session.hostToken });
+      saveSession(session);
       if (state) toast('Reconnected — you still have control.', 'success');
       return;
-    } catch (err) {
-      // The room is genuinely gone (server wiped, or it timed out).
-      toast(`Room ${session.roomCode} no longer exists — opening a new one.`, 'warn', 7000);
+    } catch {
+      toast(`Room ${session.roomCode} is no longer open on this server.`, 'warn', 7000);
       clearSession();
       session = null;
       state = null;
     }
   }
-  await createRoom();
+  // No room yet. Deliberately do NOT create one automatically: on a public URL
+  // that would mean every curious visitor silently spawns a room, and it would
+  // hide the moment a code comes into existence from the person who has to
+  // read it out.
+  showCreateScreen();
 });
+
+socket.on('connect_error', () => {
+  if (!state) showConnectingScreen(true);
+});
+socket.on('disconnect', () => {
+  if (!state) showConnectingScreen(true);
+});
+
+/** Shown before the first connect — and on a free host, during the ~50s wake. */
+function showConnectingScreen(slow = false) {
+  mount(stage, el('div', { class: 'panel center screen', style: { padding: '56px 20px', maxWidth: '560px', margin: '0 auto' } },
+    el('div', { class: 'spinner', style: { margin: '0 auto 18px' } }),
+    el('h3', { text: slow ? 'Waking the hospital server…' : 'Connecting…' }),
+    el('p', { class: 'dim', style: { maxWidth: '42ch', margin: '0 auto' },
+      text: slow
+        ? 'Free hosting puts the server to sleep when nobody is using it. The first visit takes up to a minute to wake it — this page will continue on its own.'
+        : 'Reaching the emergency room.' })));
+}
+showConnectingScreen();
+
+function showCreateScreen() {
+  const codeInput = el('input', {
+    class: 'input input--code', placeholder: 'FH-0000', maxlength: '8',
+    inputmode: 'numeric', autocomplete: 'off', spellcheck: 'false',
+  });
+  const keyInput = el('input', {
+    class: 'input mono', style: { fontSize: '.8rem' }, placeholder: 'host key',
+    autocomplete: 'off', spellcheck: 'false',
+  });
+  const error = el('div', { class: 'field__error' });
+
+  const createBtn = el('button', {
+    class: 'btn btn--primary btn--lg btn--block',
+    text: '🏥  CREATE GAME',
+    onClick: async () => {
+      createBtn.disabled = true;
+      createBtn.textContent = 'OPENING THE ER…';
+      try {
+        await createRoom();
+      } finally {
+        createBtn.disabled = false;
+        createBtn.textContent = '🏥  CREATE GAME';
+      }
+    },
+  });
+
+  mount(stage, el('div', { class: 'screen', style: { maxWidth: '520px', margin: '0 auto', display: 'grid', gap: 'var(--gap)' } },
+
+    el('div', { class: 'panel panel--accent center' },
+      el('div', { class: 'eyebrow', text: 'Chief of Medicine' }),
+      el('h1', { style: { fontSize: 'clamp(1.4rem,4vw,2rem)', margin: '.2rem 0 .4rem' }, text: 'Open an Emergency Room' }),
+      el('p', { class: 'dim', style: { margin: '0 0 18px' },
+        text: 'You get a room code and a join link to share. Up to 12 doctors can connect from anywhere.' }),
+      ecgStrip(),
+      createBtn),
+
+    el('div', { class: 'panel' },
+      el('div', { class: 'panel__title', style: { marginBottom: '10px' }, text: 'Already running a room?' }),
+      el('p', { class: 'mute', style: { fontSize: '.86rem', marginTop: 0 },
+        text: 'Paste the host key from your other device to take control of a room that is already open.' }),
+      el('div', { class: 'stack', style: { gap: '8px' } },
+        codeInput,
+        keyInput,
+        error,
+        el('button', {
+          class: 'btn btn--block',
+          text: 'Take control',
+          onClick: async (e) => {
+            const roomCode = codeInput.value.replace(/\D/g, '').slice(0, 4);
+            const hostToken = keyInput.value.trim();
+            error.textContent = '';
+            if (roomCode.length !== 4 || !hostToken) {
+              error.textContent = 'Enter the 4-digit room code and the host key.';
+              return;
+            }
+            e.currentTarget.disabled = true;
+            try {
+              await send('host:resume', { roomCode: `FH-${roomCode}`, hostToken });
+              session = { role: 'host', roomCode: `FH-${roomCode}`, hostToken };
+              saveSession(session);
+              toast('You now control this room.', 'success');
+            } catch (err) {
+              error.textContent = err.message;
+              e.currentTarget.disabled = false;
+            }
+          },
+        }))),
+
+    el('p', { class: 'mute center', style: { fontSize: '.8rem' },
+      text: 'Students never come here — send them the join link instead.' })));
+}
 
 async function createRoom() {
   try {
@@ -58,10 +168,8 @@ async function createRoom() {
     saveSession(session);
     play('monitor');
   } catch (err) {
-    mount(stage, el('div', { class: 'panel center', style: { padding: '48px 20px' } },
-      el('h3', { text: 'Could not open a room' }),
-      el('p', { class: 'dim', text: err.message }),
-      el('button', { class: 'btn btn--primary', text: 'Try again', onClick: () => window.location.reload() })));
+    toastError(err);
+    throw err;
   }
 }
 
@@ -154,6 +262,27 @@ function roomCard() {
       el('input', { class: 'input mono', style: { fontSize: '.76rem' }, readonly: true, value: link, onClick: (e) => e.currentTarget.select() })),
 
     el('div', { class: 'row-tight' }, copyBtn('Copy link', link), copyBtn('Copy code', state.code)),
+
+    el('div', { class: 'divider' }),
+
+    // The host's own escape hatch. Kept collapsed because it must never be
+    // pasted into the class chat by mistake — whoever opens it becomes host.
+    el('details', {},
+      el('summary', { style: { cursor: 'pointer', fontSize: '.78rem', fontWeight: '700', color: 'var(--amber)' },
+        text: '🔑 Host key — keep private' }),
+      el('p', { class: 'mute', style: { fontSize: '.76rem', margin: '8px 0' },
+        text: 'Open this link on another device to move control of THIS room there. Anyone who has it becomes the host — do not share it with students.' }),
+      session?.hostToken
+        ? el('div', { class: 'stack', style: { gap: '6px' } },
+          el('input', {
+            class: 'input mono', style: { fontSize: '.68rem' }, readonly: true,
+            value: hostUrl(state.code, session.hostToken),
+            onClick: (e) => e.currentTarget.select(),
+          }),
+          el('div', { class: 'row-tight' },
+            copyBtn('Copy host link', hostUrl(state.code, session.hostToken)),
+            copyBtn('Copy key only', session.hostToken)))
+        : el('p', { class: 'mute', style: { fontSize: '.76rem' }, text: 'Unavailable in this session.' })),
 
     el('div', { class: 'divider' }),
 
